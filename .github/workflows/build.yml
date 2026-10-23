@@ -1,7 +1,10 @@
 name: Build PHIRMS APK
 on:
   push:
+    branches: [ "main" ]
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,7 +33,17 @@ jobs:
           gradle-version: '8.7'
       - name: Build APK
         run: gradle -p "$PROJECT_DIR" --no-daemon assembleDebug
-      - uses: actions/upload-artifact@v4
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
           name: PHIRMS-debug-apk
           path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+      - name: Release APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0-${{ github.run_number }}
+          name: "Beamer-1.0 Release #${{ github.run_number }}"
+          files: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          body: "Automated public build and release of Beamer-1.0 APK."
+          draft: false
+          prerelease: false
