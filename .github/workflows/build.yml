@@ -1,4 +1,4 @@
-name: Build PHIRMS APK
+name: Build FcAm APK
 on:
   push:
     branches: [ "main" ]
@@ -12,38 +12,50 @@ jobs:
       - uses: actions/checkout@v4
       - name: Find and unzip project
         run: |
-          ls -la
           ZIP=$(find . -maxdepth 3 -iname '*.zip' | head -n1)
           echo "Found zip: $ZIP"
-          test -n "$ZIP" || { echo "NO ZIP IN REPO - upload PHIRMS-project.zip"; exit 1; }
+          test -n "$ZIP" || { echo "NO ZIP IN REPO"; exit 1; }
           unzip -o -q "$ZIP" -d unpacked
-          SETTINGS=$(find unpacked -name settings.gradle.kts | head -n1)
-          test -n "$SETTINGS" || { echo "settings.gradle.kts not found in zip"; exit 1; }
+          SETTINGS=$(find unpacked -name settings.gradle* | head -n1)
           echo "PROJECT_DIR=$(dirname "$SETTINGS")" >> "$GITHUB_ENV"
+
+      - name: Change App Display Name to FcAm
+        run: |
+          # Find the strings.xml file and change the app_name value
+          STRINGS_FILE=$(find unpacked -name strings.xml | grep "src/main/res/values/strings.xml" | head -n1)
+          if [ -n "$STRINGS_FILE" ]; then
+            echo "Updating app name in $STRINGS_FILE"
+            sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">FcAm<\/string>/g' "$STRINGS_FILE"
+          else
+            echo "strings.xml not found, skipping name change"
+          fi
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Accept Android licenses and install platform
-        run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
+      - name: Accept Android licenses
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
+
       - name: Build APK
         run: gradle -p "$PROJECT_DIR" --no-daemon assembleDebug
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: PHIRMS-debug-apk
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
-      - name: Release APK
+
+      - name: Prepare Final APK
+        run: |
+          OLD_PATH=$(find unpacked -name "*-debug.apk" | head -n1)
+          NEW_PATH="${{ env.PROJECT_DIR }}/FcAm.apk"
+          mv "$OLD_PATH" "$NEW_PATH"
+          echo "FINAL_APK_PATH=$NEW_PATH" >> "$GITHUB_ENV"
+
+      - name: Release FcAm APK
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0-${{ github.run_number }}
-          name: "Beamer-1.0 Release #${{ github.run_number }}"
-          files: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
-          body: "Automated public build and release of Beamer-1.0 APK."
+          name: "FcAm Release #${{ github.run_number }}"
+          files: ${{ env.FINAL_APK_PATH }}
+          body: "Automated build of FcAm app."
           draft: false
           prerelease: false
